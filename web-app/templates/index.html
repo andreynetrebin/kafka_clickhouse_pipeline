@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sales Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8">Real-time Sales Dashboard</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- График продаж -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Sales per Hour</h2>
+                <canvas id="salesChart" height="300"></canvas>
+            </div>
+
+            <!-- Движения на складе -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Top Stock Movements</h2>
+                <canvas id="stockChart" height="300"></canvas>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold mb-4">Recent Sales</h2>
+            <table class="min-w-full divide-y divide-gray-200" id="salesTable">
+                <thead>
+                    <tr>
+                        <th class="px-6 py-3 text-left">Product ID</th>
+                        <th class="px-6 py-3 text-left">Quantity</th>
+                        <th class="px-6 py-3 text-left">Price</th>
+                        <th class="px-6 py-3 text-left">Time</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <!-- Данные подгружаются через JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Загрузка данных и инициализация графиков
+        async function loadData() {
+            const [salesRes, stockRes] = await Promise.all([
+                fetch('/api/sales'),
+                fetch('/api/stock')
+            ]);
+
+            const salesData = await salesRes.json();
+            const stockData = await stockRes.json();
+
+            // График продаж
+            new Chart(document.getElementById('salesChart'), {
+                type: 'line',
+                data: {
+                    labels: salesData.labels,
+                    datasets: [
+                        {
+                            label: 'Items Sold',
+                            data: salesData.quantity,
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Revenue (RUB)',
+                            data: salesData.revenue,
+                            borderColor: 'rgb(16, 185, 129)',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { type: 'linear', display: true, position: 'left' },
+                        y1: { type: 'linear', display: true, position: 'right' }
+                    }
+                }
+            });
+
+            // График склада
+            new Chart(document.getElementById('stockChart'), {
+                type: 'bar',
+                data: {
+                    labels: stockData.products,
+                    datasets: [
+                        {
+                            label: 'Incoming',
+                            data: stockData.incoming,
+                            backgroundColor: 'rgba(16, 185, 129, 0.8)'
+                        },
+                        {
+                            label: 'Outgoing',
+                            data: stockData.outgoing,
+                            backgroundColor: 'rgba(239, 68, 68, 0.8)'
+                        }
+                    ]
+                },
+                options: { responsive: true }
+            });
+
+            // Загрузка последних продаж
+            fetch('/api/recent_sales')
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.querySelector('#salesTable tbody');
+                    tbody.innerHTML = data.map(sale => `
+                        <tr>
+                            <td class="px-6 py-4">${sale.product_id}</td>
+                            <td class="px-6 py-4">${sale.quantity}</td>
+                            <td class="px-6 py-4">${sale.price} RUB</td>
+                            <td class="px-6 py-4">${new Date(sale.event_time).toLocaleString()}</td>
+                        </tr>
+                    `).join('');
+                });
+        }
+
+        // Обновление данных каждые 5 секунд
+        loadData();
+        setInterval(loadData, 5000);
+    </script>
+</body>
+</html>
+

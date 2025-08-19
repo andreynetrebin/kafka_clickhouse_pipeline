@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
+    ports: [ "2181:2181" ]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka
+    depends_on: [ zookeeper ]
+    ports: [ "9092:9092" ]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+      KAFKA_JVM_PERFORMANCE_OPTS: "-XX:MaxInlineLevel=15 -XX:+UseG1GC"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--list", "--bootstrap-server", "kafka:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.7'
+          memory: 768M
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.3
+    container_name: clickhouse
+    ports: [ "8123:8123", "9000:9000" ]
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    environment:
+      CLICKHOUSE_DB_DEFAULT_PATH: "/var/lib/clickhouse"
+    volumes:
+      - ./clickhouse-config.xml:/etc/clickhouse-server/config.d/optimized-config.xml
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.8'
+          memory: 4G
+
+  data-generator:
+    build: ./data-generator
+    container_name: data-generator
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: "kafka:29092"
+      CLICKHOUSE_HOST: "clickhouse"
+      WAIT_FOR_KAFKA: "true"
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 256M
+    restart: unless-stopped
+
+  web-app:
+    build: ./web-app
+    container_name: web-app
+    ports: [ "3000:3000" ]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 512M
+
+volumes:
+  clickhouse_data:
