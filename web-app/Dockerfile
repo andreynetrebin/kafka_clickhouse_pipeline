@@ -1,8 +1,10 @@
 FROM python:3.9-slim
 
 WORKDIR /app
-COPY . .
 
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["gunicorn", "--bind", "0.0.0.0:3000", "app:app"]
+COPY . .
+
+CMD ["sh", "-c", "sleep 10 && gunicorn --bind 0.0.0.0:3000 app:app"]
